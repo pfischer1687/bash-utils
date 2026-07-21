@@ -1,0 +1,190 @@
+#!/usr/bin/env bash
+
+set -Eeuo pipefail
+
+#######################################
+# Bootstrap
+#######################################
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=../lib/common.sh
+source "$SCRIPT_DIR/../lib/common.sh"
+
+#######################################
+# Configuration
+#######################################
+
+RUNNER="npm"
+PACKAGE_DIR=""
+
+#######################################
+# Helpers
+#######################################
+
+usage() {
+    cat <<EOF
+Usage:
+  jscheck [options]
+
+Runs formatting, linting, typechecking, tests, and build for an npm project.
+
+Options:
+  --verbose         Enable bash debug output
+  -h, --help        Show this help message
+
+Examples:
+  jscheck
+  jscheck --verbose
+EOF
+}
+
+find_package_json() {
+    local matches=()
+
+    while IFS= read -r -d '' path; do
+        matches+=("$path")
+    done < <(
+        find . \
+            \( -name node_modules -o -name dist -o -name build \) -prune -o \
+            -name package.json -print0 \
+            2>/dev/null
+    )
+
+    if [[ ${#matches[@]} -eq 0 ]]; then
+        error "No package.json found in this repository"
+        exit 1
+    fi
+
+    if [[ ${#matches[@]} -gt 1 ]]; then
+        error "Multiple package.json files found:"
+        local path
+        for path in "${matches[@]}"; do
+            echo "  $path" >&2
+        done
+        error "Refusing to guess. Future versions may support --dir."
+        exit 1
+    fi
+
+    echo "${matches[0]}"
+}
+
+load_nvm() {
+    local nvm_sh=""
+
+    if [[ -n "${NVM_DIR:-}" && -s "$NVM_DIR/nvm.sh" ]]; then
+        nvm_sh="$NVM_DIR/nvm.sh"
+    elif [[ -s "$HOME/.nvm/nvm.sh" ]]; then
+        nvm_sh="$HOME/.nvm/nvm.sh"
+    else
+        error "nvm is not available"
+        error "Install nvm or set NVM_DIR to your nvm installation"
+        exit 1
+    fi
+
+    # nvm references unset variables; disable nounset while loading it
+    set +u
+    # shellcheck disable=SC1090
+    source "$nvm_sh"
+    set -u
+}
+
+activate_node() {
+    require_file "$PACKAGE_DIR/.nvmrc"
+
+    load_nvm
+
+    if ! command -v nvm >/dev/null 2>&1; then
+        error "nvm failed to load"
+        exit 1
+    fi
+
+    local requested
+    requested="$(tr -d '[:space:]' <"$PACKAGE_DIR/.nvmrc")"
+
+    log "Activating Node version from .nvmrc ($requested)"
+
+    if ! nvm use "$requested"; then
+        error "Failed to activate Node $requested"
+        error "Install it with: nvm install $requested"
+        exit 1
+    fi
+}
+
+has_script() {
+    local name="$1"
+    SCRIPT_NAME="$name" node -e '
+        const scripts = require("./package.json").scripts || {};
+        process.exit(scripts[process.env.SCRIPT_NAME] ? 0 : 1);
+    '
+}
+
+run_project_script() {
+    local description="$1"
+    local script_name="$2"
+    shift 2
+
+    if ! has_script "$script_name"; then
+        warn "Skipping $description (no \"$script_name\" script in package.json)"
+        return 0
+    fi
+
+    run_step "$description" "$RUNNER" "$@"
+}
+
+#######################################
+# Argument parsing
+#######################################
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --verbose)
+            set -x
+            shift
+            ;;
+        -h | --help)
+            usage
+            exit 0
+            ;;
+        *)
+            error "Unknown argument: $1"
+            usage
+            exit 1
+            ;;
+    esac
+done
+
+#######################################
+# Main
+#######################################
+
+main() {
+    require_command git
+    require_command find
+
+    cd_to_git_root
+
+    local package_json
+    package_json="$(find_package_json)"
+    PACKAGE_DIR="$(cd "$(dirname "$package_json")" && pwd)"
+
+    log "Using package.json at: $package_json"
+    cd "$PACKAGE_DIR" || {
+        error "Failed to change directory to: $PACKAGE_DIR"
+        exit 1
+    }
+
+    activate_node
+
+    require_command node
+    require_command "$RUNNER"
+
+    run_project_script "Formatting" "format" run format
+    run_project_script "Linting" "lint" run lint
+    run_project_script "Typechecking" "typecheck" run typecheck
+    run_project_script "Testing" "test" test
+    run_project_script "Building" "build" run build
+
+    success "All checks passed"
+}
+
+main

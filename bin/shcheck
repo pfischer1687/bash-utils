@@ -1,0 +1,133 @@
+#!/usr/bin/env bash
+
+set -Eeuo pipefail
+
+#######################################
+# Bootstrap
+#######################################
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=../lib/common.sh
+source "$SCRIPT_DIR/../lib/common.sh"
+
+#######################################
+# Configuration
+#######################################
+
+SCRIPTS=()
+
+#######################################
+# Helpers
+#######################################
+
+usage() {
+    cat <<EOF
+Usage:
+  shcheck [options]
+
+Discovers Bash scripts in the current repository, formats them with shfmt,
+and lints them with ShellCheck.
+
+Options:
+  --verbose         Enable bash debug output
+  -h, --help        Show this help message
+
+Examples:
+  shcheck
+  shcheck --verbose
+EOF
+}
+
+is_bash_script() {
+    local path="$1"
+    local shebang
+
+    IFS= read -r shebang <"$path" || return 1
+
+    case "$shebang" in
+        '#!/usr/bin/env bash'* | '#!/bin/bash'* | '#!/usr/bin/bash'*)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+discover_scripts() {
+    local path
+
+    SCRIPTS=()
+
+    while IFS= read -r -d '' path; do
+        if is_bash_script "$path"; then
+            SCRIPTS+=("$path")
+        fi
+    done < <(
+        find . \
+            \( \
+            -name .git -o \
+            -name node_modules -o \
+            -name dist -o \
+            -name build -o \
+            -name target -o \
+            -name .venv -o \
+            -name vendor \
+            \) -prune -o \
+            -type f -print0 \
+            2>/dev/null | sort -z
+    )
+
+    if [[ ${#SCRIPTS[@]} -eq 0 ]]; then
+        die "No Bash scripts found in this repository"
+    fi
+}
+
+#######################################
+# Argument parsing
+#######################################
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --verbose)
+            set -x
+            shift
+            ;;
+        -h | --help)
+            usage
+            exit 0
+            ;;
+        *)
+            error "Unknown argument: $1"
+            usage
+            exit 1
+            ;;
+    esac
+done
+
+#######################################
+# Main
+#######################################
+
+main() {
+    require_command git
+    require_command find
+    require_command shfmt
+    require_command shellcheck
+
+    cd_to_git_root
+
+    log "Discovering Bash scripts"
+    discover_scripts
+    success "Found ${#SCRIPTS[@]} Bash scripts"
+
+    run_step "Formatting Bash scripts" \
+        shfmt -w -i 4 -ci "${SCRIPTS[@]}"
+
+    run_step "Running ShellCheck" \
+        shellcheck -x --source-path=SCRIPTDIR "${SCRIPTS[@]}"
+
+    success "All Bash scripts passed"
+}
+
+main

@@ -3,22 +3,19 @@
 set -Eeuo pipefail
 
 #######################################
+# Bootstrap
+#######################################
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=../lib/common.sh
+source "$SCRIPT_DIR/../lib/common.sh"
+
+#######################################
 # Configuration
 #######################################
 
 LINT_ONLY=false
 SKIP_PRECOMMIT=false
-VERBOSE=false
-
-#######################################
-# Colors
-#######################################
-
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-BLUE='\033[0;34m'
-YELLOW='\033[1;33m'
-NC='\033[0m'
 
 #######################################
 # Helpers
@@ -44,40 +41,6 @@ Examples:
 EOF
 }
 
-log() {
-    echo -e "${BLUE}==>${NC} $1"
-}
-
-success() {
-    echo -e "${GREEN}✓${NC} $1"
-}
-
-warn() {
-    echo -e "${YELLOW}!${NC} $1"
-}
-
-error() {
-    echo -e "${RED}✗${NC} $1" >&2
-}
-
-require_command() {
-    if ! command -v "$1" >/dev/null 2>&1; then
-        error "Required command not found: $1"
-        exit 1
-    fi
-}
-
-run_step() {
-    local description="$1"
-    shift
-
-    log "$description"
-
-    "$@"
-
-    success "$description completed"
-}
-
 #######################################
 # Argument parsing
 #######################################
@@ -93,11 +56,10 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --verbose)
-            VERBOSE=true
             set -x
             shift
             ;;
-        -h|--help)
+        -h | --help)
             usage
             exit 0
             ;;
@@ -117,10 +79,7 @@ main() {
     require_command uv
     require_command git
 
-    if [[ ! -d ".git" ]]; then
-        error "Not inside a git repository"
-        exit 1
-    fi
+    cd_to_git_root
 
     if [[ -f ".venv/bin/activate" ]]; then
         log "Detected virtual environment (.venv)"
