@@ -16,6 +16,7 @@ source "$SCRIPT_DIR/../lib/common.sh"
 
 RUNNER="npm"
 PACKAGE_DIR=""
+LINT_ONLY=false
 
 #######################################
 # Helpers
@@ -29,11 +30,13 @@ Usage:
 Runs formatting, linting, typechecking, tests, and build for an npm project.
 
 Options:
+  --lint-only       Run format, lint, and typecheck; skip test and build
   --verbose         Enable bash debug output
   -h, --help        Show this help message
 
 Examples:
   jscheck
+  jscheck --lint-only
   jscheck --verbose
 EOF
 }
@@ -137,6 +140,10 @@ run_project_script() {
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        --lint-only)
+            LINT_ONLY=true
+            shift
+            ;;
         --verbose)
             set -x
             shift
@@ -181,6 +188,12 @@ main() {
     run_project_script "Formatting" "format" run format
     run_project_script "Linting" "lint" run lint
     run_project_script "Typechecking" "typecheck" run typecheck
+
+    if [[ "$LINT_ONLY" == true ]]; then
+        success "Lint-only mode complete"
+        exit 0
+    fi
+
     run_project_script "Testing" "test" test
     run_project_script "Building" "build" run build
 

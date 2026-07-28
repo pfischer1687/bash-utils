@@ -32,8 +32,11 @@ Runs the usual frontend pre-commit checklist against an npm project:
 
 ```bash
 jscheck
+jscheck --lint-only
 jscheck --verbose
 ```
+
+`--lint-only` runs format, lint, and typecheck, then stops (skips test and build).
 
 ### Expectations
 
