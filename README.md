@@ -9,15 +9,22 @@ Runs the usual Python pre-commit checklist:
 1. Ruff auto-fixes
 2. Ruff format
 3. Pyright
-4. pre-commit (optional)
-5. pytest (optional)
+4. pre-commit (if a config is present)
+5. pytest
 
 ```bash
 pycheck
 pycheck --lint-only
-pycheck --no-precommit
+pycheck --test-only
 pycheck --verbose
 ```
+
+`--lint-only` runs format/lint/typecheck/pre-commit, then stops (skips pytest).
+`--test-only` runs pytest only (skips format, lint, typecheck, and pre-commit).
+These modes are mutually exclusive.
+
+Pre-commit runs when `.pre-commit-config.yaml` (or `.yml`) exists at the repo root; otherwise that step is skipped with
+a warning.
 
 Requires `uv` and `git`. Works from any directory inside the repository.
 
@@ -33,10 +40,13 @@ Runs the usual frontend pre-commit checklist against an npm project:
 ```bash
 jscheck
 jscheck --lint-only
+jscheck --test-only
 jscheck --verbose
 ```
 
 `--lint-only` runs format, lint, and typecheck, then stops (skips test and build).
+`--test-only` runs tests only (skips format, lint, typecheck, and build).
+These modes are mutually exclusive.
 
 ### Expectations
 
@@ -61,7 +71,8 @@ Uses:
 - **shfmt** — formats scripts in place (4-space indent, case indentation)
 - **ShellCheck** — static analysis / linting
 
-Scripts are found by Bash shebang (`#!/usr/bin/env bash`, etc.), including extensionless files. Dependency and build directories such as `.git`, `node_modules`, `dist`, `build`, `target`, `.venv`, and `vendor` are skipped.
+Scripts are found by Bash shebang (`#!/usr/bin/env bash`, etc.), including extensionless files. Dependency and build
+directories such as `.git`, `node_modules`, `dist`, `build`, `target`, `.venv`, and `vendor` are skipped.
 
 Requires `shfmt`, `shellcheck`, and `git`. Works from any directory inside a repository.
 

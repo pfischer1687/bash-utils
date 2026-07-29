@@ -11,13 +11,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../lib/common.sh"
 
 #######################################
-# Configuration
-#######################################
-
-LINT_ONLY=false
-SKIP_PRECOMMIT=false
-
-#######################################
 # Helpers
 #######################################
 
@@ -30,15 +23,26 @@ Runs formatting, linting, type checking, pre-commit, and tests.
 
 Options:
   --lint-only       Run checks but skip pytest
-  --no-precommit    Skip pre-commit hooks
+  --test-only       Run pytest only; skip format, lint, typecheck, and pre-commit
   --verbose         Enable bash debug output
   -h, --help        Show this help message
 
 Examples:
   pycheck
   pycheck --lint-only
-  pycheck --no-precommit
+  pycheck --test-only
 EOF
+}
+
+find_precommit_config() {
+    local candidate
+    for candidate in .pre-commit-config.yaml .pre-commit-config.yml; do
+        if [[ -f "$candidate" ]]; then
+            echo "$candidate"
+            return 0
+        fi
+    done
+    return 1
 }
 
 #######################################
@@ -48,11 +52,11 @@ EOF
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --lint-only)
-            LINT_ONLY=true
+            set_check_mode lint
             shift
             ;;
-        --no-precommit)
-            SKIP_PRECOMMIT=true
+        --test-only)
+            set_check_mode test
             shift
             ;;
         --verbose)
@@ -87,31 +91,34 @@ main() {
         warn "No .venv found (uv will still manage environments)"
     fi
 
-    run_step "Running Ruff auto-fixes" \
-        uv run ruff check --fix
+    if [[ "$CHECK_MODE" != "test" ]]; then
+        run_step "Running Ruff auto-fixes" \
+            uv run ruff check --fix
 
-    run_step "Running Ruff formatter" \
-        uv run ruff format
+        run_step "Running Ruff formatter" \
+            uv run ruff format
 
-    run_step "Running Pyright" \
-        uv run pyright
+        run_step "Running Pyright" \
+            uv run pyright
 
-    if [[ "$SKIP_PRECOMMIT" == false ]]; then
-        run_step "Running pre-commit hooks" \
-            uv run pre-commit run --all-files
-    else
-        warn "Skipping pre-commit"
+        local precommit_config
+        if precommit_config="$(find_precommit_config)"; then
+            run_step "Running pre-commit hooks" \
+                uv run pre-commit run --all-files --config "$precommit_config"
+        else
+            warn "Skipping pre-commit (no .pre-commit-config.yaml found)"
+        fi
     fi
 
-    if [[ "$LINT_ONLY" == true ]]; then
-        success "Lint-only mode complete"
+    if [[ "$CHECK_MODE" == "lint" ]]; then
+        success "$(check_mode_complete_message)"
         exit 0
     fi
 
     run_step "Running pytest" \
         uv run pytest
 
-    success "All checks passed"
+    success "$(check_mode_complete_message)"
 }
 
 main

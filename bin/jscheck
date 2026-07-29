@@ -16,7 +16,6 @@ source "$SCRIPT_DIR/../lib/common.sh"
 
 RUNNER="npm"
 PACKAGE_DIR=""
-LINT_ONLY=false
 
 #######################################
 # Helpers
@@ -31,12 +30,14 @@ Runs formatting, linting, typechecking, tests, and build for an npm project.
 
 Options:
   --lint-only       Run format, lint, and typecheck; skip test and build
+  --test-only       Run tests only; skip format, lint, typecheck, and build
   --verbose         Enable bash debug output
   -h, --help        Show this help message
 
 Examples:
   jscheck
   jscheck --lint-only
+  jscheck --test-only
   jscheck --verbose
 EOF
 }
@@ -141,7 +142,11 @@ run_project_script() {
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --lint-only)
-            LINT_ONLY=true
+            set_check_mode lint
+            shift
+            ;;
+        --test-only)
+            set_check_mode test
             shift
             ;;
         --verbose)
@@ -185,19 +190,27 @@ main() {
     require_command node
     require_command "$RUNNER"
 
-    run_project_script "Formatting" "format" run format
-    run_project_script "Linting" "lint" run lint
-    run_project_script "Typechecking" "typecheck" run typecheck
+    if [[ "$CHECK_MODE" != "test" ]]; then
+        run_project_script "Formatting" "format" run format
+        run_project_script "Linting" "lint" run lint
+        run_project_script "Typechecking" "typecheck" run typecheck
+    fi
 
-    if [[ "$LINT_ONLY" == true ]]; then
-        success "Lint-only mode complete"
+    if [[ "$CHECK_MODE" == "lint" ]]; then
+        success "$(check_mode_complete_message)"
         exit 0
     fi
 
     run_project_script "Testing" "test" test
+
+    if [[ "$CHECK_MODE" == "test" ]]; then
+        success "$(check_mode_complete_message)"
+        exit 0
+    fi
+
     run_project_script "Building" "build" run build
 
-    success "All checks passed"
+    success "$(check_mode_complete_message)"
 }
 
 main

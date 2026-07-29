@@ -69,6 +69,38 @@ run_step() {
 }
 
 #######################################
+# Check modes (lint-only / test-only)
+#######################################
+
+# all | lint | test — used by pycheck, jscheck, and similar runners
+CHECK_MODE="all"
+
+set_check_mode() {
+    local mode="$1"
+
+    case "$mode" in
+        lint | test) ;;
+        *)
+            die "Internal error: invalid check mode '$mode'"
+            ;;
+    esac
+
+    if [[ "$CHECK_MODE" != "all" && "$CHECK_MODE" != "$mode" ]]; then
+        die "Cannot combine --${CHECK_MODE}-only and --${mode}-only"
+    fi
+
+    CHECK_MODE="$mode"
+}
+
+check_mode_complete_message() {
+    case "$CHECK_MODE" in
+        lint) echo "Lint-only mode complete" ;;
+        test) echo "Test-only mode complete" ;;
+        *) echo "All checks passed" ;;
+    esac
+}
+
+#######################################
 # Repository discovery
 #######################################
 
